@@ -167,7 +167,7 @@ void TCC0_PWMCallbackRegister(TCC_CALLBACK callback, uintptr_t context)
 }
 
 /* Interrupt Handler */
-void __attribute__((used)) TCC0_OTHER_InterruptHandler(void)
+void __attribute__((used)) TCC0_OTHER_Handler(void)
 {
     uint32_t status;
     /* Additional local variable to prevent MISRA C violations (Rule 13.x) */
