@@ -1,90 +1,71 @@
 #include <stddef.h>                     // Defines NULL
 #include <stdbool.h>                    // Defines true
 #include <stdlib.h>                     // Defines EXIT_FAILURE
-#include <string.h>
 #include "definitions.h"                // SYS function prototypes
 
-#define RX_BUFFER_SIZE 10
-#define LED_ON    LED_Clear
-#define LED_OFF   LED_Set
+/***************************************
+ * Check PWM outputs on pins
+ * Channel 0 PWMH - PC04
+ * Channel 0 PWML - PD11
+ * Channel 1 PWMH - PD08
+ * Channel 1 PWML - PB17
+ * Channel 2 PWMH - PB14
+ * Channel 2 PWML - PC22
+***************************************/
 
-char messageStart[] = "****  USART echo demo: Non-blocking Transfer with the interrupt  ****\r\n\
-**** Type 10 characters. The received characters are echoed back, and the LED is toggled ****\r\n";
-char receiveBuffer[RX_BUFFER_SIZE] = {0};
-char echoBuffer[RX_BUFFER_SIZE+4] = {0};
-char messageError[] = "**** USART error occurred ****\r\n";
+/* Duty cycle increment value */
+#define DUTY_INCREMENT (10U)
 
-static bool errorStatus = false;
-static bool writeStatus = false;
-static bool readStatus = false;
+/* Save PWM period */
+static uint32_t period;
 
-
-void APP_WriteCallback(uintptr_t context)
+/* This function is called after TCC period event */
+void TCC_PeriodEventHandler(uint32_t status, uintptr_t context)
 {
-    writeStatus = true;
-}
+    /* duty cycle values */
+    static uint32_t duty0 = 0U;
+    static uint32_t duty1 = 800U;
+    static uint32_t duty2 = 1600U;
 
-void APP_ReadCallback(uintptr_t context)
-{
-    if(SERCOM2_USART_ErrorGet() != USART_ERROR_NONE)
-    {
-        /* ErrorGet clears errors, set error flag to notify console */
-        errorStatus = true;
-    }
-    else
-    {
-        readStatus = true;
-    }
+    TCC0_PWM24bitDutySet(TCC0_CHANNEL0, duty0);
+    TCC0_PWM24bitDutySet(TCC0_CHANNEL1, duty1);
+    TCC0_PWM24bitDutySet(TCC0_CHANNEL2, duty2);
+    
+    /* Increment duty cycle values */
+    duty0 += DUTY_INCREMENT;
+    duty1 += DUTY_INCREMENT;
+    duty2 += DUTY_INCREMENT;
+    
+    if (duty0 > period)
+        duty0 = 0U;
+    if (duty1 > period)
+        duty1 = 0U;
+    if (duty2 > period)
+        duty2 = 0U;
+
 }
 
 int main ( void )
 {
     /* Initialize all modules */
     SYS_Initialize ( NULL );
-
-    /* Register callback functions and send start message */
-    SERCOM2_USART_WriteCallbackRegister(APP_WriteCallback, 0);
-    SERCOM2_USART_ReadCallbackRegister(APP_ReadCallback, 0);
-    SERCOM2_USART_Write(&messageStart[0], sizeof(messageStart));
+    
+        /* Register callback function for period event */
+    TCC0_PWMCallbackRegister(TCC_PeriodEventHandler, (uintptr_t)NULL);
+    
+    /* Read the period */
+    period = TCC0_PWM24bitPeriodGet();
+    
+    /* Start PWM*/
+    TCC0_PWMStart();
 
     while ( true )
     {
-        if(errorStatus == true)
-        {
-            /* Send error message to console */
-            errorStatus = false;
-            SERCOM2_USART_Write(&messageError[0], sizeof(messageError));
-        }
-        else if(readStatus == true)
-        {
-            /* Echo back received buffer and Toggle LED */
-            readStatus = false;
-
-            echoBuffer[0] = '\n';
-            echoBuffer[1] = '\r';
-            memcpy(&echoBuffer[2], receiveBuffer,sizeof(receiveBuffer));
-            echoBuffer[RX_BUFFER_SIZE+2] = '\n';
-            echoBuffer[RX_BUFFER_SIZE+3] = '\r';
-
-            SERCOM2_USART_Write(&echoBuffer[0], sizeof(echoBuffer));
-            LED_Toggle();
-        }
-        else if(writeStatus == true)
-        {
-            /* Submit buffer to read user data */
-            writeStatus = false;
-            SERCOM2_USART_Read(&receiveBuffer[0], sizeof(receiveBuffer));
-        }
-        else
-        {
-            /* Repeat the loop */
-            ;
-        }
+        /* Maintain state machines of all polled MPLAB Harmony modules. */
+        SYS_Tasks ( );
     }
 
     /* Execution should not come here during normal operation */
 
     return ( EXIT_FAILURE );
 }
-
-
