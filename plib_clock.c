@@ -1,5 +1,3 @@
-
-
 #include "plib_clock.h"
 #include "sam.h"
 
@@ -28,8 +26,11 @@ static void FDPLL0_Initialize(void)
     /****************** DPLL0 Initialization  *********************************/
 
     /* Configure DPLL    */
+    // USART
     OSCCTRL_REGS->DPLL[0].OSCCTRL_DPLLCTRLB = OSCCTRL_DPLLCTRLB_FILTER(0U) | OSCCTRL_DPLLCTRLB_LTIME(0x0U)| OSCCTRL_DPLLCTRLB_REFCLK(3U) | OSCCTRL_DPLLCTRLB_DIV(5U);
-
+    
+    // TCC
+    OSCCTRL_REGS->DPLL[0].OSCCTRL_DPLLCTRLB = OSCCTRL_DPLLCTRLB_FILTER(0U) | OSCCTRL_DPLLCTRLB_LTIME(0x0U)| OSCCTRL_DPLLCTRLB_REFCLK(0U) ;
 
     OSCCTRL_REGS->DPLL[0].OSCCTRL_DPLLRATIO = OSCCTRL_DPLLRATIO_LDRFRAC(0U) | OSCCTRL_DPLLRATIO_LDR(119U);
 
@@ -123,7 +124,16 @@ void CLOCK_Initialize (void)
     {
         /* Wait for synchronization */
     }
+    
+     /* Selection of the Generator and write Lock for TCC0 TCC1 */
+    GCLK_REGS->GCLK_PCHCTRL[25] = GCLK_PCHCTRL_GEN(0x0U)  | GCLK_PCHCTRL_CHEN_Msk;
 
+    while ((GCLK_REGS->GCLK_PCHCTRL[25] & GCLK_PCHCTRL_CHEN_Msk) != GCLK_PCHCTRL_CHEN_Msk)
+    {
+        /* Wait for synchronization */
+    }
+    
+    
     /* Configure the AHB Bridge Clocks */
     MCLK_REGS->MCLK_AHBMASK = 0xffffffU;
 
@@ -131,7 +141,7 @@ void CLOCK_Initialize (void)
     MCLK_REGS->MCLK_APBAMASK = 0x7ffU;
 
     /* Configure the APBB Bridge Clocks */
-    MCLK_REGS->MCLK_APBBMASK = 0x18256U;
+    MCLK_REGS->MCLK_APBBMASK = 0x18256U | (1 << 11);
 
 
 }
