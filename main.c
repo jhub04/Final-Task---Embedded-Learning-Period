@@ -52,19 +52,18 @@ void APP_ReadCallback(uintptr_t context)
 /* Set percentage of channel 0*/
 void set_tcc_ch0_percentage(int percentage)  
 {
-    uint32_t duty = (period * percentage) / 100U;
-    TCC0_PWM24bitDutySet(TCC0_CHANNEL0, duty);
+    uint32_t duty = (period * (uint32_t)percentage) / 100U;
+    
+    uint32_t invDuty = (period >= duty) ? (period - duty) : 0U;
+    
+    TCC0_PWM24bitDutySet(TCC0_CHANNEL0, invDuty);
 }
 
 int extract_percentage(const char* receiveBuffer)
 {
     int pct = atoi(receiveBuffer);
-   
-    if (pct < 0) pct = 0;
-    if (pct > 100) pct = 100;
     
-    return pct;
-    
+    return pct;  
 }
 
 int main ( void )
