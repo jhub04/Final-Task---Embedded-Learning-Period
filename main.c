@@ -1,48 +1,70 @@
 #include <stddef.h>                     // Defines NULL
 #include <stdbool.h>                    // Defines true
 #include <stdlib.h>                     // Defines EXIT_FAILURE
+#include <string.h>
 #include "definitions.h"                // SYS function prototypes
+#include <stdio.h>
 
-/***************************************
- * Check PWM outputs on pins
- * Channel 0 PWMH - PC04
- * Channel 0 PWML - PD11
- * Channel 1 PWMH - PD08
- * Channel 1 PWML - PB17
- * Channel 2 PWMH - PB14
- * Channel 2 PWML - PC22
-***************************************/
+
+#define RX_BUFFER_SIZE 2
+#define LED_ON LED_Clear
+#define LED_OFF LED_Set
 
 /* Duty cycle increment value */
 #define DUTY_INCREMENT (10U)
 
+char messageStart[] = "**** USART?PWM demo (SAME54 + SERCOM2 + TCC0) ****\r\n"
+"Type a number 0..100 to set duty %% on TCC0 CH0.\r\n"
+"Example: 37<Enter>  -> sets duty to 37%%\r\n\r\n";
+
+char receiveBuffer[RX_BUFFER_SIZE] = {0};
+char echoBuffer[RX_BUFFER_SIZE+4] = {0};
+char messageError[] = "**** USART error occurred ****\r\n";
+
+static bool errorStatus = false;
+static bool writeStatus = false;
+static bool readStatus = false;
+
+
 /* Save PWM period */
 static uint32_t period;
 
-/* This function is called after TCC period event */
-void TCC_PeriodEventHandler(uint32_t status, uintptr_t context)
+
+void APP_WriteCallback(uintptr_t context)
 {
-    /* duty cycle values */
-    static uint32_t duty0 = 0U;
-    static uint32_t duty1 = 800U;
-    static uint32_t duty2 = 1600U;
+    writeStatus = true;
+}
 
-    TCC0_PWM24bitDutySet(TCC0_CHANNEL0, duty0);
-    TCC0_PWM24bitDutySet(TCC0_CHANNEL1, duty1);
-    TCC0_PWM24bitDutySet(TCC0_CHANNEL2, duty2);
-    
-    /* Increment duty cycle values */
-    duty0 += DUTY_INCREMENT;
-    duty1 += DUTY_INCREMENT;
-    duty2 += DUTY_INCREMENT;
-    
-    if (duty0 > period)
-        duty0 = 0U;
-    if (duty1 > period)
-        duty1 = 0U;
-    if (duty2 > period)
-        duty2 = 0U;
+void APP_ReadCallback(uintptr_t context)
+{
+    if(SERCOM2_USART_ErrorGet() != USART_ERROR_NONE)
+    {
+        /* ErrorGet clears errors, set error flag to notify console */
+        errorStatus = true;
+    }
+    else
+    {
+        readStatus = true;
+    }
+}
 
+
+/* Set percentage of channel 0*/
+void set_tcc_ch0_percentage(int percentage)  
+{
+    uint32_t duty = (period * percentage) / 100U;
+    TCC0_PWM24bitDutySet(TCC0_CHANNEL0, duty);
+}
+
+int extract_percentage(const char* receiveBuffer)
+{
+    int pct = atoi(receiveBuffer);
+   
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    
+    return pct;
+    
 }
 
 int main ( void )
@@ -50,19 +72,56 @@ int main ( void )
     /* Initialize all modules */
     SYS_Initialize ( NULL );
     
-        /* Register callback function for period event */
-    TCC0_PWMCallbackRegister(TCC_PeriodEventHandler, (uintptr_t)NULL);
+    /* USART Setup */
+    SERCOM2_USART_WriteCallbackRegister(APP_WriteCallback, 0);
+    SERCOM2_USART_ReadCallbackRegister(APP_ReadCallback, 0);
+    SERCOM2_USART_Write(&messageStart[0], sizeof(messageStart));
     
-    /* Read the period */
+    /* TCC Setup */
     period = TCC0_PWM24bitPeriodGet();
-    
-    /* Start PWM*/
     TCC0_PWMStart();
+    set_tcc_ch0_percentage(0);
 
     while ( true )
     {
-        /* Maintain state machines of all polled MPLAB Harmony modules. */
-        SYS_Tasks ( );
+        if (errorStatus == true) {
+            /* Send error message to console */
+            errorStatus = false;
+            SERCOM2_USART_Write(&messageError[0], sizeof(messageError));
+        }
+        else if (readStatus == true) 
+        {
+            readStatus = false;
+            
+            echoBuffer[0] = '\n';
+            echoBuffer[1] = '\r';
+            
+            memcpy(&echoBuffer[2], receiveBuffer,sizeof(receiveBuffer));
+            echoBuffer[RX_BUFFER_SIZE+2] = '\n';
+            echoBuffer[RX_BUFFER_SIZE+3] = '\r';
+            
+            
+           
+            int percentage = extract_percentage(receiveBuffer);
+            set_tcc_ch0_percentage(percentage);
+            
+            snprintf(&echoBuffer[2], sizeof(echoBuffer), "%d" ,percentage);
+            
+            SERCOM2_USART_Write(&echoBuffer[0], sizeof(echoBuffer));
+            LED_Toggle();
+            
+            
+            
+        } 
+        else if (writeStatus == true) 
+        {
+            writeStatus = false;
+            SERCOM2_USART_Read(&receiveBuffer[0], sizeof(receiveBuffer));
+        } 
+        else {
+            SYS_Tasks ( );
+        }
+      
     }
 
     /* Execution should not come here during normal operation */
