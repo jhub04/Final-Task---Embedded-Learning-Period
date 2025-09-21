@@ -139,7 +139,7 @@ void SYS_Initialize ( void* data )
     SERCOM2_USART_Initialize();
     
 
-    //TCC0_PWMInitialize();
+    TCC0_PWMInitialize();
     
     NVIC_Initialize();
 
